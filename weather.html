@@ -1,1 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CallSheet Weather</title>
 
+<style>
+body { font-family: Arial; margin:20px; background:#f4f4f4; }
+.wrap { max-width:1100px; margin:auto; background:#fff; padding:20px; border-radius:10px; }
+.grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:10px; }
+.card { border:1px solid #ddd; padding:12px; border-radius:8px; background:#fafafa; }
+.label { font-size:11px; color:#666; }
+.value { font-size:20px; font-weight:bold; }
+</style>
+
+</head>
+<body>
+
+<div class="wrap">
+<h1>CallSheet Weather</h1>
+
+<input id="zip" placeholder="ZIP Code">
+<input id="date" type="date">
+<button onclick="go()">Load</button>
+
+<p id="status"></p>
+
+<div id="grid" class="grid" style="display:none">
+
+<div class="card"><div class="label">Location</div><div id="loc" class="value"></div></div>
+
+<div class="card"><div class="label">Condition</div><div id="cond" class="value"></div></div>
+
+<div class="card"><div class="label">Temp / Real Feel</div><div id="temp" class="value"></div></div>
+
+<div class="card"><div class="label">High / Low</div><div id="hl" class="value"></div></div>
+
+<div class="card"><div class="label">Humidity / Dew</div><div id="hum" class="value"></div></div>
+
+<div class="card"><div class="label">Wind / Gust</div><div id="wind" class="value"></div></div>
+
+<div class="card"><div class="label">Cloud / Visibility</div><div id="cloud" class="value"></div></div>
+
+<div class="card"><div class="label">UV Index</div><div id="uv" class="value"></div></div>
+
+<div class="card"><div class="label">Air Quality</div><div id="aqi" class="value"></div></div>
+
+<div class="card"><div class="label">Pollen</div><div id="pollen" class="value"></div></div>
+
+<div class="card"><div class="label">Elevation</div><div id="elev" class="value"></div></div>
+
+</div>
+
+</div>
+
+<script>
+
+function tomorrow(){
+ let d=new Date();
+ d.setDate(d.getDate()+1);
+ return d.toISOString().split("T")[0];
+}
+
+document.getElementById("date").value = tomorrow();
+
+function txt(code){
+ return ["Clear","Mainly Clear","Partly Cloudy","Overcast"][code] || "Weather";
+}
+
+async function go(){
+
+ let zip=document.getElementById("zip").value;
+ let date=document.getElementById("date").value;
+
+ if(!zip){alert("enter zip");return;}
+
+ document.getElementById("status").innerText="Loading...";
+
+ try{
+
+ // GEO
+ let g=await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${zip}&count=1`);
+ let gdata=await g.json();
+
+ let lat=gdata.results[0].latitude;
+ let lon=gdata.results[0].longitude;
+ let name=gdata.results[0].name;
+
+ // WEATHER
+ let w=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,apparent_temperature,relative_humidity_2m,dew_point_2m,weather_code,wind_speed_10m,wind_gusts_10m,cloud_cover,visibility&daily=temperature_2m_max,temperature_2m_min,uv_index_max,precipitation_probability_max&timezone=auto`);
+ let wd=await w.json();
+
+ let i=wd.daily.time.indexOf(date);
+
+ // AIR (FIXED)
+ let a=await fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=us_aqi,pm2_5,pm10,alder_pollen,birch_pollen,grass_pollen,ragweed_pollen`);
+ let ad=await a.json();
+
+ // ELEV
+ let e=await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${lat}&longitude=${lon}`);
+ let ed=await e.json();
+
+ document.getElementById("loc").innerText=name;
+
+ document.getElementById("cond").innerText=txt(wd.current.weather_code);
+
+ document.getElementById("temp").innerText=
+ Math.round(wd.current.temperature_2m)+"° / "+
+ Math.round(wd.current.apparent_temperature)+"°";
+
+ document.getElementById("hl").innerText=
+ Math.round(wd.daily.temperature_2m_max[i])+"° / "+
+ Math.round(wd.daily.temperature_2m_min[i])+"°";
+
+ document.getElementById("hum").innerText=
+ wd.current.relative_humidity_2m+"% / "+
+ Math.round(wd.current.dew_point_2m)+"°";
+
+ document.getElementById("wind").innerText=
+ wd.current.wind_speed_10m+" / "+
+ wd.current.wind_gusts_10m+" km/h";
+
+ document.getElementById("cloud").innerText=
+ wd.current.cloud_cover+"% / "+
+ (wd.current.visibility/1000).toFixed(1)+"km";
+
+ document.getElementById("uv").innerText=
+ wd.daily.uv_index_max[i];
+
+ document.getElementById("aqi").innerText=
+ ad.current.us_aqi;
+
+ let p=ad.current;
+ document.getElementById("pollen").innerText=
+ `Grass ${p.grass_pollen} | Ragweed ${p.ragweed_pollen}`;
+
+ document.getElementById("elev").innerText=
+ Math.round(ed.elevation[0]*3.28)+" ft";
+
+ document.getElementById("grid").style.display="grid";
+ document.getElementById("status").innerText="Loaded";
+
+ }catch(err){
+ document.getElementById("status").innerText="Error loading data";
+ }
+
+}
+
+</script>
+
+</body>
+</html>
