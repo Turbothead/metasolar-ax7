@@ -29,33 +29,21 @@ body { font-family: Arial; margin:20px; background:#f4f4f4; }
 <div id="grid" class="grid" style="display:none">
 
 <div class="card"><div class="label">Location</div><div id="loc" class="value"></div></div>
-
 <div class="card"><div class="label">Condition</div><div id="cond" class="value"></div></div>
-
 <div class="card"><div class="label">Temp / Real Feel</div><div id="temp" class="value"></div></div>
-
 <div class="card"><div class="label">High / Low</div><div id="hl" class="value"></div></div>
-
 <div class="card"><div class="label">Humidity / Dew</div><div id="hum" class="value"></div></div>
-
 <div class="card"><div class="label">Wind / Gust</div><div id="wind" class="value"></div></div>
-
 <div class="card"><div class="label">Cloud / Visibility</div><div id="cloud" class="value"></div></div>
-
 <div class="card"><div class="label">UV Index</div><div id="uv" class="value"></div></div>
-
 <div class="card"><div class="label">Air Quality</div><div id="aqi" class="value"></div></div>
-
 <div class="card"><div class="label">Pollen</div><div id="pollen" class="value"></div></div>
-
 <div class="card"><div class="label">Elevation</div><div id="elev" class="value"></div></div>
 
 </div>
-
 </div>
 
 <script>
-
 function tomorrow(){
  let d=new Date();
  d.setDate(d.getDate()+1);
@@ -65,12 +53,17 @@ function tomorrow(){
 document.getElementById("date").value = tomorrow();
 
 function txt(code){
- return ["Clear","Mainly Clear","Partly Cloudy","Overcast"][code] || "Weather";
+ const map = {
+  0:"Clear",1:"Mainly Clear",2:"Partly Cloudy",3:"Overcast",
+  45:"Fog",48:"Rime Fog",51:"Light Drizzle",53:"Drizzle",55:"Dense Drizzle",
+  61:"Light Rain",63:"Rain",65:"Heavy Rain",71:"Light Snow",73:"Snow",75:"Heavy Snow",
+  80:"Rain Showers",81:"Heavy Rain Showers",82:"Violent Rain Showers",95:"Thunderstorm"
+ };
+ return map[code] || `Code ${code}`;
 }
 
 async function go(){
-
- let zip=document.getElementById("zip").value;
+ let zip=document.getElementById("zip").value.trim();
  let date=document.getElementById("date").value;
 
  if(!zip){alert("enter zip");return;}
@@ -78,31 +71,27 @@ async function go(){
  document.getElementById("status").innerText="Loading...";
 
  try{
-
- // GEO
- let g=await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${zip}&count=1`);
+ let g=await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(zip)}&count=1&countryCode=US`);
  let gdata=await g.json();
+ if(!gdata.results || !gdata.results.length) throw new Error("No location found.");
 
  let lat=gdata.results[0].latitude;
  let lon=gdata.results[0].longitude;
  let name=gdata.results[0].name;
 
- // WEATHER
- let w=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,apparent_temperature,relative_humidity_2m,dew_point_2m,weather_code,wind_speed_10m,wind_gusts_10m,cloud_cover,visibility&daily=temperature_2m_max,temperature_2m_min,uv_index_max,precipitation_probability_max&timezone=auto`);
+ let w=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,apparent_temperature,relative_humidity_2m,dew_point_2m,weather_code,wind_speed_10m,wind_gusts_10m,cloud_cover,visibility&daily=temperature_2m_max,temperature_2m_min,uv_index_max,precipitation_probability_max&timezone=auto&forecast_days=16`);
  let wd=await w.json();
 
  let i=wd.daily.time.indexOf(date);
+ if(i === -1) throw new Error("Selected date is outside forecast range.");
 
- // AIR (FIXED)
  let a=await fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=us_aqi,pm2_5,pm10,alder_pollen,birch_pollen,grass_pollen,ragweed_pollen`);
  let ad=await a.json();
 
- // ELEV
  let e=await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${lat}&longitude=${lon}`);
  let ed=await e.json();
 
  document.getElementById("loc").innerText=name;
-
  document.getElementById("cond").innerText=txt(wd.current.weather_code);
 
  document.getElementById("temp").innerText=
@@ -133,20 +122,35 @@ async function go(){
 
  let p=ad.current;
  document.getElementById("pollen").innerText=
- `Grass ${p.grass_pollen} | Ragweed ${p.ragweed_pollen}`;
+ `Grass ${p.grass_pollen ?? 0} | Ragweed ${p.ragweed_pollen ?? 0}`;
 
  document.getElementById("elev").innerText=
- Math.round(ed.elevation[0]*3.28)+" ft";
+ Math.round(ed.elevation[0]*3.28084)+" ft";
 
  document.getElementById("grid").style.display="grid";
  document.getElementById("status").innerText="Loaded";
 
- }catch(err){
- document.getElementById("status").innerText="Error loading data";
- }
+ const newUrl = new URL(window.location.href);
+ newUrl.searchParams.set("zip", zip);
+ newUrl.searchParams.set("date", date);
+ window.history.replaceState({}, "", newUrl.toString());
 
+ }catch(err){
+ document.getElementById("status").innerText=err.message || "Error loading data";
+ }
 }
 
+const params = new URLSearchParams(window.location.search);
+const zipFromUrl = params.get("zip");
+const dateFromUrl = params.get("date");
+
+if(dateFromUrl){
+ document.getElementById("date").value = dateFromUrl;
+}
+if(zipFromUrl){
+ document.getElementById("zip").value = zipFromUrl;
+ go();
+}
 </script>
 
 </body>
