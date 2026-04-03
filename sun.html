@@ -118,27 +118,8 @@ function fmtDateFriendly(dateStr, timeZone) {
   }).format(d);
 }
 
-function fmtTime(iso, timeZone) {
-  const d = new Date(iso);
-  return new Intl.DateTimeFormat("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-    timeZone
-  }).format(d);
-}
-
-function durationText(startIso, endIso) {
-  const s = new Date(startIso);
-  const e = new Date(endIso);
-  const mins = Math.round((e - s) / 60000);
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  return `${h}h ${m}m`;
-}
-
 async function geocodePostal(input) {
-  const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(input)}&count=1&language=en&format=json`;
+  const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(input)}&count=1&language=en&format=json&countryCode=US`;
   const res = await fetch(url);
   if (!res.ok) throw new Error("Geocoding request failed.");
   const data = await res.json();
@@ -162,8 +143,8 @@ async function fetchElevation(lat, lon) {
   return await res.json();
 }
 
-async function fetchSun(lat, lon, dateStr) {
-  const url = `https://api.sunrisesunset.io/json?lat=${lat}&lng=${lon}&date=${dateStr}&timezone=UTC`;
+async function fetchSun(lat, lon, dateStr, tz) {
+  const url = `https://api.sunrisesunset.io/json?lat=${lat}&lng=${lon}&date=${dateStr}&timezone=${encodeURIComponent(tz)}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error("Sun data request failed.");
   const data = await res.json();
@@ -199,7 +180,7 @@ async function go() {
 
     document.getElementById("status").innerText = "Loading sun data...";
     const [sun, elev] = await Promise.all([
-      fetchSun(place.latitude, place.longitude, date),
+      fetchSun(place.latitude, place.longitude, date, place.timezone),
       fetchElevation(place.latitude, place.longitude)
     ]);
 
@@ -217,43 +198,33 @@ async function go() {
 
     document.getElementById("sunriseSunset").innerText =
       `${safeText(sun.sunrise)} / ${safeText(sun.sunset)}`;
-    document.getElementById("sunriseSunsetMeta").innerText =
-      `Sunrise / sunset`;
+    document.getElementById("sunriseSunsetMeta").innerText = `Local sunrise / sunset`;
 
     document.getElementById("firstLast").innerText =
       `${safeText(sun.first_light)} / ${safeText(sun.last_light)}`;
-    document.getElementById("firstLastMeta").innerText =
-      `First usable light / last usable light`;
+    document.getElementById("firstLastMeta").innerText = `First usable light / last usable light`;
 
     document.getElementById("golden").innerText =
       `${safeText(sun.golden_hour)} / ${safeText(sun.golden_hour_end)}`;
-    document.getElementById("goldenMeta").innerText =
-      `Morning golden hour start / evening golden hour end`;
+    document.getElementById("goldenMeta").innerText = `Morning golden hour start / evening golden hour end`;
 
     document.getElementById("civil").innerText =
       `${safeText(sun.dawn)} / ${safeText(sun.dusk)}`;
-    document.getElementById("civilMeta").innerText =
-      `Civil twilight start / end`;
+    document.getElementById("civilMeta").innerText = `Civil twilight start / end`;
 
     document.getElementById("nautical").innerText =
       `${safeText(sun.nautical_dawn)} / ${safeText(sun.nautical_dusk)}`;
-    document.getElementById("nauticalMeta").innerText =
-      `Nautical twilight start / end`;
+    document.getElementById("nauticalMeta").innerText = `Nautical twilight start / end`;
 
     document.getElementById("astro").innerText =
       `${safeText(sun.astronomical_dawn)} / ${safeText(sun.astronomical_dusk)}`;
-    document.getElementById("astroMeta").innerText =
-      `Astronomical twilight start / end`;
+    document.getElementById("astroMeta").innerText = `Astronomical twilight start / end`;
 
-    document.getElementById("solarNoon").innerText =
-      safeText(sun.solar_noon);
-    document.getElementById("solarNoonMeta").innerText =
-      `Daylight: ${safeText(sun.day_length)}`;
+    document.getElementById("solarNoon").innerText = safeText(sun.solar_noon);
+    document.getElementById("solarNoonMeta").innerText = `Daylight: ${safeText(sun.day_length)}`;
 
-    document.getElementById("elev").innerText =
-      elevFeet != null ? `${elevFeet} ft` : "—";
-    document.getElementById("elevMeta").innerText =
-      elevMeters != null ? `${Math.round(elevMeters)} m above sea level` : "";
+    document.getElementById("elev").innerText = elevFeet != null ? `${elevFeet} ft` : "—";
+    document.getElementById("elevMeta").innerText = elevMeters != null ? `${Math.round(elevMeters)} m above sea level` : "";
 
     const newUrl = new URL(window.location.href);
     newUrl.searchParams.set("zip", zip);
