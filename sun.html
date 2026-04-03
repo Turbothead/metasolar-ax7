@@ -1,23 +1,83 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CallSheet Sun</title>
-<style>
-body { font-family: Arial, sans-serif; margin: 20px; background: #f4f4f4; color: #111; }
-.wrap { max-width: 1100px; margin: auto; background: #fff; padding: 20px; border-radius: 10px; }
-.controls { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; }
-input, button { padding: 10px 12px; font-size: 16px; }
-input { min-width: 240px; }
-button { cursor: pointer; }
-.status { margin: 10px 0 20px; font-weight: bold; }
-.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; }
-.card { border: 1px solid #ddd; padding: 12px; border-radius: 8px; background: #fafafa; }
-.label { font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
-.value { font-size: 20px; font-weight: bold; }
-.small { font-size: 13px; color: #444; margin-top: 4px; line-height: 1.4; }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CallSheet Sun</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      background: #f4f4f4;
+      color: #111;
+    }
+
+    .wrap {
+      max-width: 1100px;
+      margin: auto;
+      background: #fff;
+      padding: 20px;
+      border-radius: 10px;
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 18px;
+    }
+
+    input, button {
+      padding: 10px 12px;
+      font-size: 16px;
+    }
+
+    input {
+      min-width: 240px;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    .status {
+      margin: 10px 0 20px;
+      font-weight: bold;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 10px;
+    }
+
+    .card {
+      border: 1px solid #ddd;
+      padding: 12px;
+      border-radius: 8px;
+      background: #fafafa;
+    }
+
+    .label {
+      font-size: 11px;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 4px;
+    }
+
+    .value {
+      font-size: 20px;
+      font-weight: bold;
+    }
+
+    .small {
+      font-size: 13px;
+      color: #444;
+      margin-top: 4px;
+      line-height: 1.4;
+    }
+  </style>
 </head>
 <body>
 
@@ -45,6 +105,12 @@ button { cursor: pointer; }
       <div class="label">Forecast Date</div>
       <div id="fdate" class="value">—</div>
       <div id="fdateMeta" class="small"></div>
+    </div>
+
+    <div class="card">
+      <div class="label">Timezone</div>
+      <div id="tz" class="value">—</div>
+      <div id="tzMeta" class="small"></div>
     </div>
 
     <div class="card">
@@ -84,7 +150,7 @@ button { cursor: pointer; }
     </div>
 
     <div class="card">
-      <div class="label">Solar Noon / Daylight</div>
+      <div class="label">Solar Noon / Day Length</div>
       <div id="solarNoon" class="value">—</div>
       <div id="solarNoonMeta" class="small"></div>
     </div>
@@ -100,7 +166,7 @@ button { cursor: pointer; }
 
 <script>
 function tomorrow() {
-  let d = new Date();
+  const d = new Date();
   d.setDate(d.getDate() + 1);
   return d.toISOString().split("T")[0];
 }
@@ -118,12 +184,35 @@ function fmtDateFriendly(dateStr, timeZone) {
   }).format(d);
 }
 
+function safeText(v) {
+  return v == null || v === "" ? "—" : v;
+}
+
+/*
+  SunriseSunset.io returns plain time strings like "6:31:25 AM".
+  Those are already in the timezone we request from the API.
+  So we DO NOT convert them again in JavaScript.
+*/
+function displayApiTime(v) {
+  return safeText(v);
+}
+
 async function geocodePostal(input) {
-  const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(input)}&count=1&language=en&format=json&countryCode=US`;
+  const url =
+    `https://geocoding-api.open-meteo.com/v1/search` +
+    `?name=${encodeURIComponent(input)}` +
+    `&count=1` +
+    `&language=en` +
+    `&format=json` +
+    `&countryCode=US`;
+
   const res = await fetch(url);
   if (!res.ok) throw new Error("Geocoding request failed.");
+
   const data = await res.json();
-  if (!data.results || !data.results.length) throw new Error("No location found for that ZIP/postal code.");
+  if (!data.results || !data.results.length) {
+    throw new Error("No location found for that ZIP/postal code.");
+  }
 
   const place = data.results[0];
   return {
@@ -144,16 +233,22 @@ async function fetchElevation(lat, lon) {
 }
 
 async function fetchSun(lat, lon, dateStr, tz) {
-  const url = `https://api.sunrisesunset.io/json?lat=${lat}&lng=${lon}&date=${dateStr}&timezone=${encodeURIComponent(tz)}`;
+  const url =
+    `https://api.sunrisesunset.io/json` +
+    `?lat=${lat}` +
+    `&lng=${lon}` +
+    `&date=${encodeURIComponent(dateStr)}` +
+    `&timezone=${encodeURIComponent(tz)}`;
+
   const res = await fetch(url);
   if (!res.ok) throw new Error("Sun data request failed.");
-  const data = await res.json();
-  if (data.status !== "OK" || !data.results) throw new Error("Sun API returned an error.");
-  return data.results;
-}
 
-function safeText(v) {
-  return v == null || v === "" ? "—" : v;
+  const data = await res.json();
+  if (data.status !== "OK" || !data.results) {
+    throw new Error("Sun API returned an error.");
+  }
+
+  return data.results;
 }
 
 async function go() {
@@ -194,37 +289,49 @@ async function go() {
         .join(" • ");
 
     document.getElementById("fdate").innerText = fmtDateFriendly(date, place.timezone);
-    document.getElementById("fdateMeta").innerText = `Timezone: ${place.timezone}`;
+    document.getElementById("fdateMeta").innerText = `Local date for call sheet`;
+
+    document.getElementById("tz").innerText = place.timezone;
+    document.getElementById("tzMeta").innerText = `Chosen automatically from the ZIP/postal lookup`;
 
     document.getElementById("sunriseSunset").innerText =
-      `${safeText(sun.sunrise)} / ${safeText(sun.sunset)}`;
-    document.getElementById("sunriseSunsetMeta").innerText = `Local sunrise / sunset`;
+      `${displayApiTime(sun.sunrise)} / ${displayApiTime(sun.sunset)}`;
+    document.getElementById("sunriseSunsetMeta").innerText =
+      `Local sunrise / local sunset`;
 
     document.getElementById("firstLast").innerText =
-      `${safeText(sun.first_light)} / ${safeText(sun.last_light)}`;
-    document.getElementById("firstLastMeta").innerText = `First usable light / last usable light`;
+      `${displayApiTime(sun.first_light)} / ${displayApiTime(sun.last_light)}`;
+    document.getElementById("firstLastMeta").innerText =
+      `First usable light / last usable light`;
 
     document.getElementById("golden").innerText =
-      `${safeText(sun.golden_hour)} / ${safeText(sun.golden_hour_end)}`;
-    document.getElementById("goldenMeta").innerText = `Morning golden hour start / evening golden hour end`;
+      `${displayApiTime(sun.golden_hour)} / ${displayApiTime(sun.golden_hour_end)}`;
+    document.getElementById("goldenMeta").innerText =
+      `Morning golden hour start / evening golden hour end`;
 
     document.getElementById("civil").innerText =
-      `${safeText(sun.dawn)} / ${safeText(sun.dusk)}`;
-    document.getElementById("civilMeta").innerText = `Civil twilight start / end`;
+      `${displayApiTime(sun.dawn)} / ${displayApiTime(sun.dusk)}`;
+    document.getElementById("civilMeta").innerText =
+      `Civil twilight start / end`;
 
     document.getElementById("nautical").innerText =
-      `${safeText(sun.nautical_dawn)} / ${safeText(sun.nautical_dusk)}`;
-    document.getElementById("nauticalMeta").innerText = `Nautical twilight start / end`;
+      `${displayApiTime(sun.nautical_dawn)} / ${displayApiTime(sun.nautical_dusk)}`;
+    document.getElementById("nauticalMeta").innerText =
+      `Nautical twilight start / end`;
 
     document.getElementById("astro").innerText =
-      `${safeText(sun.astronomical_dawn)} / ${safeText(sun.astronomical_dusk)}`;
-    document.getElementById("astroMeta").innerText = `Astronomical twilight start / end`;
+      `${displayApiTime(sun.astronomical_dawn)} / ${displayApiTime(sun.astronomical_dusk)}`;
+    document.getElementById("astroMeta").innerText =
+      `Astronomical twilight start / end`;
 
-    document.getElementById("solarNoon").innerText = safeText(sun.solar_noon);
-    document.getElementById("solarNoonMeta").innerText = `Daylight: ${safeText(sun.day_length)}`;
+    document.getElementById("solarNoon").innerText = displayApiTime(sun.solar_noon);
+    document.getElementById("solarNoonMeta").innerText =
+      `Daylight: ${safeText(sun.day_length)}`;
 
-    document.getElementById("elev").innerText = elevFeet != null ? `${elevFeet} ft` : "—";
-    document.getElementById("elevMeta").innerText = elevMeters != null ? `${Math.round(elevMeters)} m above sea level` : "";
+    document.getElementById("elev").innerText =
+      elevFeet != null ? `${elevFeet} ft` : "—";
+    document.getElementById("elevMeta").innerText =
+      elevMeters != null ? `${Math.round(elevMeters)} m above sea level` : "";
 
     const newUrl = new URL(window.location.href);
     newUrl.searchParams.set("zip", zip);
@@ -255,6 +362,7 @@ const dateFromUrl = params.get("date");
 if (dateFromUrl) {
   document.getElementById("date").value = dateFromUrl;
 }
+
 if (zipFromUrl) {
   document.getElementById("zip").value = zipFromUrl;
   go();
